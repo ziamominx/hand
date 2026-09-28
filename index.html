@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Hand Recognition System</title>
+  
+  <!-- MediaPipe Hands & Camera Utils CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+  <style>
+    :root {
+      --bg-color: #121614;
+      --card-bg: #181d1a;
+      --border-color: #27312b;
+      --accent-green: #ccf381;
+      --accent-green-hover: #b8de70;
+      --text-main: #e0e0e0;
+      --text-muted: #808b83;
+      --button-disabled: #2d3831;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      padding: 15px;
+    }
+
+    /* Top Navigation Header */
+    header {
+      margin-bottom: 15px;
+    }
+
+    .btn-back {
+      background: #232a26;
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    /* Main Grid Layout matching reference interface */
+    .dashboard {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    @media (max-width: 900px) {
+      .dashboard {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .panel-header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .section-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .section-title {
+      font-size: 24px;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    /* Camera Viewport */
+    .camera-container {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      background: #0d100e;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    video, canvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Target Framing Overlay */
+    .frame-corner {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-color: #435449;
+      border-style: solid;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .top-left { top: 15px; left: 15px; border-width: 2px 0 0 2px; }
+    .top-right { top: 15px; right: 15px; border-width: 2px 2px 0 0; }
+    .bottom-left { bottom: 15px; left: 15px; border-width: 0 0 2px 2px; }
+    .bottom-right { bottom: 15px; right: 15px; border-width: 0 2px 2px 0; }
+
+    .camera-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--text-muted);
+      font-size: 14px;
+      z-index: 2;
+    }
+
+    .camera-placeholder svg {
+      width: 32px;
+      height: 32px;
+      stroke: var(--text-muted);
+    }
+
+    /* On-video Live Status */
+    .live-status-overlay {
+      position: absolute;
+      bottom: 15px;
+      left: 15px;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .status-text {
+      font-size: 24px;
+      font-weight: bold;
+      color: #ffffff;
+    }
+
+    /* Controls & Options */
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .tab-btn {
+      padding: 10px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      background: var(--accent-green);
+      color: #000;
+    }
+
+    .controls-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn-primary {
+      background: var(--accent-green);
+      color: #000;
+      border: none;
+      padding: 12px;
+      border-radius: 4px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-secondary {
+      background: var(--button-disabled);
+      color: var(--text-muted);
+      border: none;
+      padding: 12px;
+      border-radius: 4px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .checkbox-group {
+      display: flex;
+      gap: 20px;
+      font-size: 13px;
+      color: var(--text-main);
+    }
+
+    .checkbox-group label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .instruction-text {
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    /* Right Panel Options */
+    .chips-container {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .chip {
+      background: #25332a;
+      color: var(--accent-green);
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+      border: 1px solid #354a3d;
+    }
+
+    .divider {
+      border-top: 1px solid var(--border-color);
+      margin: 10px 0;
+    }
+
+    /* Training Form */
+    .train-form {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .text-input {
+      flex: 1;
+      background: #0d100e;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 10px;
+      color: #fff;
+      outline: none;
+    }
+
+    .btn-record {
+      background: #2c382f;
+      color: var(--accent-green);
+      border: 1px solid #3d4f42;
+      padding: 10px 15px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <button class="btn-back">Back</button>
+  </header>
+
+  <main class="dashboard">
+    <!-- Left Input Panel -->
+    <section class="panel">
+      <div>
+        <div class="panel-header-top">
+          <span class="section-label">INPUT / CAMERA</span>
+          <button id="toggleCamBtn" class="btn-back">Camera off</button>
+        </div>
+        <h1 class="section-title">Your signing space</h1>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active">ASL words</button>
+        <button class="tab-btn">Fingerspell - experimental</button>
+      </div>
+
+      <div class="camera-container">
+        <div class="frame-corner top-left"></div>
+        <div class="frame-corner top-right"></div>
+        <div class="frame-corner bottom-left"></div>
+        <div class="frame-corner bottom-right"></div>
+
+        <div id="cameraPlaceholder" class="camera-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2v20M2 12h20M5 5l14 14M5 19L19 5" />
+          </svg>
+          <span>Camera preview appears here</span>
+        </div>
+
+        <video id="webcam" autoplay playsinline style="display:none;"></video>
+        <canvas id="output_canvas"></canvas>
+
+        <div class="live-status-overlay">
+          <div class="section-label">LIVE RECOGNITION</div>
+          <div id="liveStatusText" class="status-text">Camera off</div>
+        </div>
+      </div>
+
+      <div class="controls-row">
+        <button id="startBtn" class="btn-primary">Start live translation</button>
+        <button id="pauseBtn" class="btn-secondary">Pause translation</button>
+      </div>
+
+      <div class="checkbox-group">
+        <label>
+          <input type="checkbox" id="speakAudio" checked>
+          Speak recognized words aloud
+        </label>
+        <label>
+          <input type="checkbox" id="showFacial">
+          Show facial expression estimate
+        </label>
+      </div>
+
+      <p class="instruction-text">
+        Keep your upper body and hands visible. Sign one word at a time and pause briefly between signs.<br>
+        ASL words uses the pretrained 2,000-word model. Lower your hands briefly to repeat a word. Hold both hands open for 1.5 seconds to speak the full message.
+      </p>
+
+      <div class="divider"></div>
+
+      <div>
+        <div class="section-label">YOUR VOCABULARY</div>
+        <h2 class="section-title" style="font-size: 18px;">Teach a sign</h2>
+        <p class="instruction-text" style="margin-top: 4px;">
+          Name a sign, then record it three times with slight changes in speed and position. Train a model on the saved coordinates so your signs run on your own trained dataset.
+        </p>
+
+        <div class="train-form">
+          <input type="text" id="signName" class="text-input" placeholder="e.g. my name">
+          <button class="btn-record">Record example</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Output Panel -->
+    <section class="panel">
+      <div class="panel-header-top">
+        <span class="section-label">OUTPUT / VOICE</span>
+        <span class="section-label" style="color: var(--text-main);">02</span>
+      </div>
+      
+      <div>
+        <h1 class="section-title">Your message</h1>
+      </div>
+
+      <div>
+        <div class="section-label" style="margin-bottom: 10px;">RECOGNIZED WORDS</div>
+        <div id="recognizedWords" class="chips-container">
+          <div class="chip">presentation</div>
+          <div class="chip">presentation</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div>
+        <div class="panel-header-top">
+          <span class="section-label">LIVE CANDIDATES</span>
+          <span class="instruction-text">Tap to correct or add manually</span>
+        </div>
+        <p class="instruction-text" style="margin-top: 8px;">
+          Live suggestions appear while you sign.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const videoElement = document.getElementById('webcam');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const toggleCamBtn = document.getElementById('toggleCamBtn');
+    const placeholder = document.getElementById('cameraPlaceholder');
+    const liveStatusText = document.getElementById('liveStatusText');
+    const recognizedContainer = document.getElementById('recognizedWords');
+    const speakAudioCheckbox = document.getElementById('speakAudio');
+
+    let camera = null;
+    let isTracking = false;
+    let lastSpokenText = "";
+
+    function onResults(results) {
+      // Resize canvas to match video dimensions dynamically
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
+
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        for (const landmarks of results.multiHandLandmarks) {
+          drawHandLandmarks(landmarks);
+        }
+        detectBasicGesture(results.multiHandLandmarks[0]);
+      }
+      canvasCtx.restore();
+    }
+
+    // Custom lightweight drawer for hand landmarks
+    function drawHandLandmarks(landmarks) {
+      const connections = [
+        [0,1],[1,2],[2,3],[3,4],
+        [0,5],[5,6],[6,7],[7,8],
+        [5,9],[9,10],[10,11],[11,12],
+        [9,13],[13,14],[14,15],[15,16],
+        [13,17],[17,18],[18,19],[19,20],[0,17]
+      ];
+
+      // Draw skeleton lines
+      canvasCtx.strokeStyle = '#ccf381';
+      canvasCtx.lineWidth = 3;
+      for (const [start, end] of connections) {
+        const p1 = landmarks[start];
+        const p2 = landmarks[end];
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(p1.x * canvasElement.width, p1.y * canvasElement.height);
+        canvasCtx.lineTo(p2.x * canvasElement.width, p2.y * canvasElement.height);
+        canvasCtx.stroke();
+      }
+
+      // Draw landmark joints
+      canvasCtx.fillStyle = '#ffffff';
+      for (const lm of landmarks) {
+        canvasCtx.beginPath();
+        canvasCtx.arc(lm.x * canvasElement.width, lm.y * canvasElement.height, 4, 0, 2 * Math.PI);
+        canvasCtx.fill();
+      }
+    }
+
+    // Basic heuristic to demonstrate recognition functionality
+    function detectBasicGesture(landmarks) {
+      const thumbTip = landmarks[4];
+      const indexTip = landmarks[8];
+      const middleTip = landmarks[12];
+      const ringTip = landmarks[16];
+      const pinkyTip = landmarks[20];
+
+      // Check open hand gesture
+      if (indexTip.y < landmarks[5].y && middleTip.y < landmarks[9].y && pinkyTip.y < landmarks[17].y) {
+        addRecognizedWord("presentation");
+      }
+    }
+
+    function addRecognizedWord(word) {
+      if (lastSpokenText === word) return;
+      lastSpokenText = word;
+
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.innerText = word;
+      recognizedContainer.appendChild(chip);
+
+      if (speakAudioCheckbox.checked) {
+        const utterance = new SpeechSynthesisUtterance(word);
+        window.speechSynthesis.speak(utterance);
+      }
+
+      setTimeout(() => { lastSpokenText = ""; }, 3000);
+    }
+
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    hands.onResults(onResults);
+
+    async function startCamera() {
+      if (!camera) {
+        camera = new Camera(videoElement, {
+          onFrame: async () => {
+            if (isTracking) {
+              await hands.send({ image: videoElement });
+            }
+          },
+          width: 1280,
+          height: 720
+        });
+      }
+      await camera.start();
+      placeholder.style.display = 'none';
+      videoElement.style.display = 'block';
+      toggleCamBtn.innerText = "Camera on";
+      liveStatusText.innerText = "Listening...";
+      isTracking = true;
+    }
+
+    function stopCamera() {
+      isTracking = false;
+      if (camera) {
+        camera.stop();
+        camera = null;
+      }
+      placeholder.style.display = 'flex';
+      videoElement.style.display = 'none';
+      toggleCamBtn.innerText = "Camera off";
+      liveStatusText.innerText = "Camera off";
+    }
+
+    startBtn.addEventListener('click', startCamera);
+    pauseBtn.addEventListener('click', () => {
+      isTracking = false;
+      liveStatusText.innerText = "Paused";
+    });
+
+    toggleCamBtn.addEventListener('click', () => {
+      if (isTracking) {
+        stopCamera();
+      } else {
+        startCamera();
+      }
+    });
+  </script>
+</body>
+</html>
